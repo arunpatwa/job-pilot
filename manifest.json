@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "LinkedIn Connect Note Automator",
+  "version": "0.1.0",
+  "description": "Automate sending connection notes on LinkedIn list pages.",
+  "permissions": ["storage", "tabs", "activeTab", "downloads"],
+  "host_permissions": ["https://www.linkedin.com/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Connect Note Automator"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.linkedin.com/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

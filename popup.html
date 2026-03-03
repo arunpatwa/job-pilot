@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Connect Note Automator</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Connect Note</h1>
+      <label class="label" for="note">Note text</label>
+      <textarea id="note" rows="6" placeholder="Write a short note..."></textarea>
+      <div class="actions">
+        <button id="start" class="primary">Start</button>
+        <button id="stop" class="secondary">Stop</button>
+      </div>
+      <p id="status" class="status">Idle</p>
+      <div class="divider"></div>
+      <p id="today-count" class="today-count">Today: 0 invites sent</p>
+      <button id="download-csv" class="secondary full-width">Download CSV</button>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
