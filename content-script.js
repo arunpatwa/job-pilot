@@ -328,33 +328,77 @@ async function clickAddNote(dialog) {
   return false;
 }
 
+// Set the value of a textarea/input so that framework bindings (Ember/React) pick it up.
+// Prefers execCommand('insertText') which produces a real beforeinput/input sequence; falls
+// back to the native value setter + a proper InputEvent.
+function setEditorValue(el, note) {
+  try { el.focus(); } catch (e) {}
+
+  // Clear any existing content first by selecting all, then insert via execCommand so the
+  // framework sees genuine input events. This is what reliably makes Ember commit the value.
+  try {
+    el.select && el.select();
+    const ok = document.execCommand && document.execCommand('insertText', false, note);
+    if (ok && el.value === note) {
+      try { el.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {}
+      return true;
+    }
+  } catch (e) {}
+
+  // Fallback: native value setter (bypasses React/Ember value trackers) + InputEvent.
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value');
+    if (descriptor && descriptor.set) {
+      descriptor.set.call(el, note);
+    } else {
+      el.value = note;
+    }
+  } catch (e) {
+    try { el.value = note; } catch (e2) {}
+  }
+
+  try {
+    el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: note }));
+  } catch (e) {
+    try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch (e2) {}
+  }
+  try { el.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {}
+  try { el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'a' })); } catch (e) {}
+  return el.value === note;
+}
+
+// Find the note editor, scoped to the dialog first and preferring the specific message
+// textarea so we never grab some other textarea that happens to appear earlier in the page.
+function findNoteEditor(dialog) {
+  const selectors = [
+    "textarea#custom-message",
+    "textarea[name='message']",
+    "textarea.connect-button-send-invite__custom-message",
+    "textarea",
+  ];
+  // 1) Search within the dialog node, honoring selector priority.
+  if (dialog && dialog.querySelector) {
+    for (const sel of selectors) {
+      try {
+        const found = dialog.querySelector(sel);
+        if (found) return found;
+      } catch (e) {}
+    }
+  }
+  // 2) Fall back to a deep (shadow-DOM aware) search, still honoring selector priority.
+  for (const sel of selectors) {
+    const found = querySelectorDeep(sel);
+    if (found) return found;
+  }
+  return null;
+}
+
 function fillNote(dialog, note) {
   // Support textarea or contenteditable editors; search deeply (shadow DOM included)
   try {
-    const textarea = querySelectorDeep("textarea#custom-message, textarea[name='message'], textarea");
+    const textarea = findNoteEditor(dialog);
     if (textarea) {
-      try {
-        textarea.focus();
-      } catch (e) {}
-      // Use native setter when possible (helps React-controlled inputs)
-      try {
-        const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(textarea), 'value');
-        if (descriptor && descriptor.set) {
-          descriptor.set.call(textarea, note);
-        } else {
-          textarea.value = note;
-        }
-      } catch (e) {
-        textarea.value = note;
-      }
-      // Dispatch proper input events
-      try {
-        const event = new Event('input', { bubbles: true });
-        textarea.dispatchEvent(event);
-      } catch (e) {}
-      try { textarea.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {}
-      try { textarea.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'a' })); } catch (e) {}
-      return true;
+      return setEditorValue(textarea, note);
     }
   } catch (e) {}
 
@@ -369,13 +413,23 @@ function fillNote(dialog, note) {
       try { editable.focus(); } catch (e) {}
       // For contenteditable
       if (editable.getAttribute && editable.getAttribute('contenteditable') === 'true') {
+        try { editable.focus(); } catch (e) {}
+        // Prefer execCommand so framework bindings see a real input sequence.
         try {
-          // set innerText and dispatch input events
+          const ok = document.execCommand && document.execCommand('insertText', false, note);
+          if (ok && (editable.innerText || '').trim() === note.trim()) {
+            try { editable.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {}
+            return true;
+          }
+        } catch (e) {}
+        try {
           editable.innerText = note;
         } catch (e) {
           try { editable.textContent = note; } catch (e2) {}
         }
-        try { editable.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {}
+        try { editable.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: note })); } catch (e) {
+          try { editable.dispatchEvent(new Event('input', { bubbles: true })); } catch (e2) {}
+        }
         try { editable.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {}
         try { editable.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'a' })); } catch (e) {}
         return true;
@@ -384,16 +438,7 @@ function fillNote(dialog, note) {
       // For textarea/input inside wrapper
       try {
         if ('value' in editable) {
-          const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(editable), 'value');
-          if (descriptor && descriptor.set) {
-            descriptor.set.call(editable, note);
-          } else {
-            editable.value = note;
-          }
-          try { editable.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {}
-          try { editable.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {}
-          try { editable.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'a' })); } catch (e) {}
-          return true;
+          return setEditorValue(editable, note);
         }
       } catch (e) {}
     }
